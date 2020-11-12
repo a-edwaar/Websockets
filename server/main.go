@@ -1,10 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
-	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -20,9 +18,28 @@ type Event struct {
 	Time    string `json:"time"`
 }
 
+var clients = make(map[*websocket.Conn]bool) // To keep track of all open websockets
+var broadcast = make(chan Event)             // Event queue
+
 func main() {
 	http.HandleFunc("/chat", chatSocket)
+	go handleBroadcast()
 	log.Fatal(http.ListenAndServe(":8080", nil))
+}
+
+// Takes events from the queue and gives to all open websockets
+func handleBroadcast() {
+	for {
+		event := <-broadcast
+		for client := range clients {
+			err := client.WriteJSON(event)
+			if err != nil {
+				log.Printf("Closing connection for client as received: %s", err.Error())
+				client.Close()
+				delete(clients, client)
+			}
+		}
+	}
 }
 
 func chatSocket(w http.ResponseWriter, r *http.Request) {
@@ -33,23 +50,18 @@ func chatSocket(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 		return
 	}
-	// continously read and reply
-	received := &Event{}
-	var msg Event
+	defer conn.Close()
+	// add conn to map of open websockets
+	clients[conn] = true
+	// continously read new events
+	received := Event{}
 	for {
-		err := conn.ReadJSON(received)
+		err := conn.ReadJSON(&received)
 		if err != nil {
 			log.Println(err)
 			return
 		}
-		msg = Event{
-			Sender:  "server",
-			Message: fmt.Sprintf("hello %s", received.Sender),
-			Time:    time.Now().String(),
-		}
-		if err := conn.WriteJSON(msg); err != nil {
-			log.Println(err)
-			return
-		}
+		// add event to queue
+		broadcast <- received
 	}
 }

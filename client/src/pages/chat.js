@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 
 export default function Chat(){
   const [events, setEvents] = useState([]);
-  const [count, setCount] =  useState(0);
+  const [message, setMessage] = useState("");
   const ws = useRef(null); // Instance variable - doesn't cause re-render
 
   useEffect(()=>{
@@ -27,22 +27,25 @@ export default function Chat(){
     return () => ws.current.close(); // Cleanup function called when component unmounts 
   }, [])
 
-  const onClick = () => {
+  const sendMessage = (event) => {
+    event.preventDefault();
     const currentTime = new Date()
     const newMsg = {
       sender:  "Archie",
-      message: "Message "+count,
-      time: currentTime.toTimeString(),
+      message: message,
+      time: currentTime.getTime().toString(),
     };
     ws.current.send(JSON.stringify(newMsg));
-    setEvents(events.concat(newMsg))
-    setCount(count+1);
+    setMessage("");
+  }
+
+  const composingHandler = (event) => {
+    setMessage(event.target.value)
   }
 
   return(
     <div id="chat">
       <h1>Chat room</h1>
-      <p>Web socket time</p>
       <div id="chat-window">
         <ul>
           {events.map(event=> (
@@ -50,7 +53,10 @@ export default function Chat(){
           ))}
         </ul>
       </div>
-      <button onClick={onClick}>Add Message!</button>
+      <form onSubmit={sendMessage}>
+        <input type="text" id="new-message" onChange={composingHandler} value={message}/>
+        <button type="submit">Send</button>
+      </form>
     </div>
   )
 }
